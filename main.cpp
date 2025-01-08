@@ -3,6 +3,8 @@
 #include <string>
 #include <stdio.h>
 #include <vector>
+#include <cstdlib>
+#include <ctime>
 
 using namespace std;
 
@@ -67,11 +69,6 @@ public:
 
     bool checkWin(char symbol)
     {
-        // 1 - линейно (слево на право && справо на лево)
-        // 2 - вертикально (сверху вниз && снизу верх)
-        // 3 - лестница слева (вниз && верх)
-        // 4 - лестница справа (вниз && верх)
-
         int win{0};
         for(int i = 0; i < SIZE; i++)
         {
@@ -152,7 +149,15 @@ public:
     }
 };
 
-class Player
+class CurrentPlayer 
+{
+public:
+    virtual char getSymbol() const = 0;
+    virtual string get_name() const = 0;
+    virtual pair<int, int> getMove() = 0;
+};
+//
+class Player : public CurrentPlayer
 {
 private:
     string name;
@@ -183,52 +188,343 @@ public:
         return move;
     }
 
-    char getSymbol() const {return symbol; }
-    string get_name() const {return name; }
+    char getSymbol() const  {return symbol; }
+    string get_name() const  {return name; }
 };
 
-class ComputerEasy
+class ComputerEasy : public CurrentPlayer
 {
 private:
     string name = "EasyBot";
     char symbol;
 
 public:
-    ComputerEasy(char s) : symbol(s) {}
+    ComputerEasy() = default;
+    ComputerEasy(char s) : symbol(tolower(s)) {}
 
-    string get_name() const {return name; }
-    char get_symbol() const {return symbol; }
+
+    pair<int, int> getMove()
+    {
+        int row, col;
+       
+        srand(time(NULL));
+
+        row = rand() % 3 + 1;
+        col = rand() % 3 + 1; 
+       
+        pair<int, int> move = {row, col};
+
+        return move;
+    }
+
+    char getSymbol() const  {return symbol; }
+    string get_name() const  {return name; }
 };
 
-void Run_Game_With_EasyBot(const Player& p1) // ход компьютера
+
+
+/////////////////////////////////////////////////////////////
+
+class ComputerHard : public CurrentPlayer
 {
-    cout << endl;
-    char symbol = p1.getSymbol() == 'x' ? 'o' : 'x';
+private:
+    string name = "HardBot";
+    char symbol;
 
-    pair<int, int> move;    
-    int first{0}, second{0};
+public:
+    ComputerHard() = default;
+    ComputerHard(char s) : symbol(tolower(s)) {}
 
-    ComputerEasy computer(symbol); // символ компьютера
-
-    GameBoard board; // поле
-
-    while (1)
+    pair<int, int> getMove()
     {
-        if(flag)
+        int row, col;
+       
+        srand(time(NULL));
+
+        row = rand() % 3 + 1;
+        col = rand() % 3 + 1; 
+       
+        pair<int, int> move = {row, col};
+
+        return move;
+    }
+
+    char getSymbol() const  {return symbol; }
+    string get_name() const  {return name; }
+};
+
+class GameManagerBotHard
+{
+private:
+    GameBoard board;
+    Player p1;
+    ComputerHard computer;
+    CurrentPlayer* currentPlayer;
+
+public:
+    GameManagerBotHard(const Player& p1) : p1(p1), computer(p1.getSymbol() == 'x' ? 'o' : 'x'), board() {}
+
+    void runGame()
+    {
+        cout << endl;
+        board.displayBoard();
+
+        pair<int, int> move;    
+        int first{0}, second{0};
+
+        currentPlayer = &p1;
+
+        while(1)
         {
-            cout << "Игрок " << p1.get_name() << " введите координаты хода" << endl;
+            if(flag)
+            {
+                cout << "Игрок " << currentPlayer->get_name() << " введите координаты хода" << endl;
+            }
+
+            if(currentPlayer == &p1)
+            {
+                move = currentPlayer->getMove();  
+                first = move.first;
+                second = move.second;
+
+                board.makeMove(first, second, currentPlayer->getSymbol()); 
+                cout << endl;
+                cout << "Игрок " << currentPlayer->get_name() << " сделал ход в " << first << " " << second << endl;
+                cout << endl;
+                board.displayBoard();
+            }
+            else 
+            {
+                move = currentPlayer->getMove();
+                first = move.first;
+                second = move.second;
+
+                board.makeMove(first, second, currentPlayer->getSymbol()); 
+
+                while (flag == false)
+                {
+                    move = currentPlayer->getMove();
+                    board.makeMove(first, second, currentPlayer->getSymbol()); 
+                    first = move.first;
+                    second = move.second;
+                }
+                
+
+                cout << endl;
+                cout << "Игрок " << currentPlayer->get_name() << " сделал ход в " << first << " " << second << endl;
+                cout << endl;
+                board.displayBoard();
+
+            }
+
+            if(board.checkWin(currentPlayer->getSymbol()))
+            {
+                cout << "Поздравляем выиграл игрок " << currentPlayer->get_name() << " " << "(" << currentPlayer->getSymbol() << ")" << endl;
+                ofstream fout("winners.csv", ios::app);  
+
+                fout <<  currentPlayer->get_name() << " " << "(" << currentPlayer->getSymbol() << ")" << endl;       
+
+                fout.close();
+
+                
+                if(promptRestart())
+                {
+                    string name_player;
+                    char symbol_player;
+
+                    cout << "Игрок, введите своё имя и вариант: ";
+                    cin >> name_player >> symbol_player;
+                    symbol_player = tolower(symbol_player);
+
+                    Player player(name_player, symbol_player);
+
+                    GameManagerBotHard Gb(player);
+                    Gb.runGame();
+                }
+
+                break;
+            }
+            
+            if(!flag)
+            {
+                cout << "Не верный ход" << endl;
+                flag = true;
+                switchPlayeer();
+                continue;
+            }
+
+            if(board.isDraw())
+            {
+                cout << "Ничья" << endl;
+                break;
+            }
+
+            switchPlayeer();
+        }
+    }
+
+
+    void switchPlayeer()
+    {
+        if(currentPlayer == &p1)
+        {
+            currentPlayer = &computer;
         }
         else 
         {
-            cout << "Не верный ход" << endl;
-            continue;
+            currentPlayer = &p1;
         }
-
-        //move = 
     }
-    
 
-}
+    bool promptRestart()
+    {
+        char y;
+        cout << "Хотите сыграть снова? (y/n): ";
+        cin >> y;
+        
+
+        return y == 'y' ? true : false;
+    }
+};
+
+/////////////////////////////////////////////////////////////
+
+class GameManagerBot
+{
+private:
+    GameBoard board;
+    Player p1;
+    ComputerEasy computer;
+    CurrentPlayer* currentPlayer;
+
+public:
+    GameManagerBot(const Player& p1) : p1(p1), computer(p1.getSymbol() == 'x' ? 'o' : 'x'), board() {}
+
+
+    void runGame()
+    {
+        cout << endl;
+        board.displayBoard();
+
+        pair<int, int> move;    
+        int first{0}, second{0};
+
+        currentPlayer = &p1;
+
+        while(1)
+        {
+            if(flag)
+            {
+                cout << "Игрок " << currentPlayer->get_name() << " введите координаты хода" << endl;
+            }
+
+            if(currentPlayer == &p1)
+            {
+                move = currentPlayer->getMove();  
+                first = move.first;
+                second = move.second;
+
+                board.makeMove(first, second, currentPlayer->getSymbol()); 
+                cout << endl;
+                cout << "Игрок " << currentPlayer->get_name() << " сделал ход в " << first << " " << second << endl;
+                cout << endl;
+                board.displayBoard();
+            }
+            else 
+            {
+                move = currentPlayer->getMove();
+                first = move.first;
+                second = move.second;
+
+                board.makeMove(first, second, currentPlayer->getSymbol()); 
+
+                while (flag == false)
+                {
+                    move = currentPlayer->getMove();
+                    board.makeMove(first, second, currentPlayer->getSymbol()); 
+                    first = move.first;
+                    second = move.second;
+                }
+                
+
+                cout << endl;
+                cout << "Игрок " << currentPlayer->get_name() << " сделал ход в " << first << " " << second << endl;
+                cout << endl;
+                board.displayBoard();
+
+            }
+
+            if(board.checkWin(currentPlayer->getSymbol()))
+            {
+                cout << "Поздравляем выиграл игрок " << currentPlayer->get_name() << " " << "(" << currentPlayer->getSymbol() << ")" << endl;
+                ofstream fout("winners.csv", ios::app);  
+
+                fout <<  currentPlayer->get_name() << " " << "(" << currentPlayer->getSymbol() << ")" << endl;       
+
+                fout.close();
+
+                
+                if(promptRestart())
+                {
+                    string name_player;
+                    char symbol_player;
+
+                    cout << "Игрок, введите своё имя и вариант: ";
+                    cin >> name_player >> symbol_player;
+                    symbol_player = tolower(symbol_player);
+
+                    Player player(name_player, symbol_player);
+
+                    GameManagerBot Gb(player);
+                    Gb.runGame();
+                }
+
+                break;
+            }
+            
+            if(!flag)
+            {
+                cout << "Не верный ход" << endl;
+                flag = true;
+                switchPlayeer();
+                continue;
+            }
+
+            if(board.isDraw())
+            {
+                cout << "Ничья" << endl;
+                break;
+            }
+
+            switchPlayeer();
+        }
+    }
+
+
+    void switchPlayeer()
+    {
+        if(currentPlayer == &p1)
+        {
+            currentPlayer = &computer;
+        }
+        else 
+        {
+            currentPlayer = &p1;
+        }
+    }
+
+    bool promptRestart()
+    {
+        char y;
+        cout << "Хотите сыграть снова? (y/n): ";
+        cin >> y;
+        
+
+        return y == 'y' ? true : false;
+    }
+};
+
+ /////////////////////////////////////////////////////////////////
 
 class GameManager
 {
@@ -259,11 +555,16 @@ public:
             {
                 cout << "Игрок " << currentPlayer->get_name() << " введите координаты хода" << endl;
             }
-            else 
+            
+            if(!flag)
             {
                 cout << "Не верный ход" << endl;
+                flag = true;
+                switchPlayeer();
                 continue;
             }
+
+            
 
             move = currentPlayer->getMove();  
             first = move.first;
@@ -361,16 +662,17 @@ public:
 };
 
 
-
 int main()
 {
 
     cout << endl << "Добро пожаловать в \"Крестики-нолики\"!" << endl;
+    cout << endl;
 
     cout << "1. " << "Показать результаты последних 5 игр" << endl;
     cout << "2. " << "Начать игру с другом" << endl;
     cout << "3. " << "Начать игру с компьютером" << endl;
 
+    cout << endl;
     int choice;
     cin >> choice;
     cout << endl;
@@ -390,9 +692,12 @@ int main()
             }
         }
 
-        for(const auto& winner : winners)
-        {
-            cout << winner;
+        int end = winners.size() - 1;
+
+        int start = max(0, end - 4);
+
+        for (int i = start; i <= end; i++) {
+            cout << winners[i];
         }
 
         cout << endl;
@@ -430,8 +735,6 @@ int main()
 
         g.runGame();
     }
- 
-    ////////////////////////////////////////////////////////////////
 
     if(choice == 3)
     {
@@ -454,16 +757,45 @@ int main()
             string name_player;
             char symbol_player;
 
+            cout << endl;
             cout << "Игрок, введите своё имя и вариант: ";
-            cin >> name_player >> symbol_player;
+            cin >> name_player;
+
+            while (cin >> symbol_player)
+            {
+                if(symbol_player == 'x' || symbol_player == 'X' || symbol_player == 'o' || symbol_player == 'O' ) break;
+                cout << "Не верный элемент (X\\0)" << endl;
+            }
+            symbol_player = tolower(symbol_player);
 
             Player player(name_player, symbol_player);
 
-            Run_Game_With_EasyBot(player);
+            GameManagerBot Gb(player);
+            Gb.runGame();
+        }
+
+        if(choice == 2)
+        {
+            string name_player;
+            char symbol_player;
+
+            cout << endl;
+            cout << "Игрок, введите своё имя и вариант: ";
+            cin >> name_player;
+
+            while (cin >> symbol_player)
+            {
+                if(symbol_player == 'x' || symbol_player == 'X' || symbol_player == 'o' || symbol_player == 'O' ) break;
+                cout << "Не верный элемент (X\\0)" << endl;
+            }
+            symbol_player = tolower(symbol_player);
+
+            Player player(name_player, symbol_player);
+
+            GameManagerBotHard Gb(player);
+            Gb.runGame();
         }
     }
-
-    ////////////////////////////////////////////////////////////////
 
     if(choice < 1 || choice > 3)
     {
